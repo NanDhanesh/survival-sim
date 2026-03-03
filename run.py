@@ -15,6 +15,7 @@ from evolution import (
 )
 from argparse import ArgumentParser
 from copy import deepcopy
+import time
 import numpy as np
 from tqdm import tqdm
 
@@ -57,9 +58,14 @@ def run_evolution(config):
     }
 
     G = coevo["num_generations"]
-    pbar = tqdm(total=G, desc="Evolution")
+    T = sim_config["sim_steps"]
+    K = coevo["controller_training_steps"]
+    print(f"\n  Config: P={P}, sim_steps={T}, train_steps={K}, generations={G}")
+    print(f"  Per generation: 4×train ({K} grad steps each) + 4×evaluate\n")
 
     for gen in range(G):
+        gen_start = time.time()
+
         # ==============================================================
         # 1. Morphology mutation (parallel hill climber)
         # ==============================================================
@@ -75,16 +81,19 @@ def run_evolution(config):
         # ==============================================================
         # 2. Controller training (gradient-based, two-phase)
         # ==============================================================
+        t0 = time.time()
         # Phase A: train predators (parents then children) against current prey
         train_controllers(simulator, predators, prey, "predator", coevo)
         train_controllers(simulator, pred_children, prey, "predator", coevo)
         # Phase B: train prey (parents then children) against (now improved) predators
         train_controllers(simulator, prey, predators, "prey", coevo)
         train_controllers(simulator, prey_children, predators, "prey", coevo)
+        train_time = time.time() - t0
 
         # ==============================================================
         # 3. Fitness evaluation (full reward, non-differentiable)
         # ==============================================================
+        t0 = time.time()
         hof_prey_sample = prey_hof.sample(coevo["matchups_hof"])
         hof_pred_sample = pred_hof.sample(coevo["matchups_hof"])
 
@@ -100,6 +109,7 @@ def run_evolution(config):
         prey_child_fit = evaluate_fitness(
             simulator, prey_children, predators, hof_pred_sample, "prey", coevo
         )
+        eval_time = time.time() - t0
 
         # ==============================================================
         # 4. Selection (parallel hill climber: child replaces parent if >=)
@@ -131,17 +141,21 @@ def run_evolution(config):
         history["pred_fitness"].append(pred_fit.copy())
         history["prey_fitness"].append(prey_fit.copy())
 
-        pbar.set_postfix({
-            "pred": f"{pred_fit.mean():.1f}",
-            "prey": f"{prey_fit.mean():.1f}",
-        })
-        pbar.update(1)
+        gen_time = time.time() - gen_start
+        eta = gen_time * (G - gen - 1)
+        eta_str = f"{int(eta//60)}m{int(eta%60):02d}s" if eta > 60 else f"{eta:.0f}s"
+
+        print(
+            f"  Gen {gen:3d}/{G} | "
+            f"pred={pred_fit.mean():+8.2f}  prey={prey_fit.mean():8.1f} | "
+            f"train={train_time:.1f}s  eval={eval_time:.1f}s  total={gen_time:.1f}s | "
+            f"ETA {eta_str}"
+        )
 
         # Periodic checkpoint (every 10 generations)
         if (gen + 1) % 10 == 0 or gen == G - 1:
             save_checkpoint(gen, predators, prey, pred_hof, prey_hof, history)
 
-    pbar.close()
     return predators, prey, pred_hof, prey_hof, history
 
 

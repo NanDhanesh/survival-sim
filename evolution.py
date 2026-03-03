@@ -4,6 +4,7 @@ Orchestrates: morphology mutation, controller training, fitness
 evaluation, selection, and Hall-of-Fame management.
 """
 
+import time
 import numpy as np
 from copy import deepcopy
 from robot import sample_robot, mutate_mask, robot_from_mask

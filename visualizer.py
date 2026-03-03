@@ -161,6 +161,10 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------
     robot_meta = []  # list of dicts with slot, role, n_masses, n_springs, springs
 
+    if (args.predator and not args.prey) or (args.prey and not args.predator):
+        parser.error("--predator and --prey must both be provided for predator/prey mode.\n"
+                      "  Example: python3 visualizer.py --predator best_predator.npy --prey best_prey.npy")
+
     if args.predator and args.prey:
         # ---- Two-robot (predator vs prey) mode ----
         pred = np.load(args.predator, allow_pickle=True).item()

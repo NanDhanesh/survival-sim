@@ -10,7 +10,7 @@ taichi:
 ## Simulator configuration parameters
 simulator:
   n_sims: 16          # Overridden by coevolution: 2 * population_size
-  sim_steps: 1000
+  sim_steps: 300       # Timesteps per episode (300 @ dt=3e-3 = 0.9s sim time)
   dt: 3e-3
   eps: 1e-5
   springA: 0.1
@@ -29,18 +29,18 @@ simulator:
 
 ## Coevolution configuration parameters
 coevolution:
-  population_size: 8        # P predators + P prey
-  num_generations: 200
-  controller_training_steps: 20   # Gradient steps per training phase
+  population_size: 4        # P predators + P prey (use 4 for CPU, 8+ for CUDA)
+  num_generations: 100
+  controller_training_steps: 8    # Gradient steps per training phase
   r_capture: 0.15            # Capture radius (world units, ~1.5 voxel edges)
   k_consecutive: 5           # Consecutive timesteps within r_capture to trigger capture
   d_min: 0.75                # Min initial separation (5 * r_capture)
   d_max: 3.0                 # Max initial separation (20 * r_capture)
   d_threat_mult: 3.0         # d_threat = d_threat_mult * r_capture
   lambda_effort: 0.02        # Effort penalty weight
-  matchups_current: 3        # Opponents from current generation per evaluation
-  matchups_hof: 2            # Opponents from HoF per evaluation
-  n_gaps: 2                  # Random initial gaps per opponent pairing
+  matchups_current: 2        # Opponents from current generation per evaluation
+  matchups_hof: 1            # Opponents from HoF per evaluation
+  n_gaps: 1                  # Random initial gaps per opponent pairing
   hof_size: 50               # Maximum Hall-of-Fame size per population
   hof_k: 2                   # Elites added to HoF per generation
   p_flip: 0.05               # Per-voxel mutation probability
