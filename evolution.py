@@ -264,24 +264,39 @@ def compute_effort_numpy(target_L, actual_L, n_springs):
 
 
 def episode_reward_predator(d, T, r_capture, k_consecutive, effort, lam):
+    """Predator reward: incentivise approaching and capturing prey.
+
+    - With capture:   100 + time_bonus  (huge reward)
+    - Without capture: up to ~15  based on how much gap was closed
+    """
     captured, t_cap = detect_capture(d, r_capture, k_consecutive)
-    bonus = 100.0 if captured else 0.0
-    time_bonus = float(T - t_cap)
-    approach = 0.1 * float(d[0] - d[min(t_cap, T - 1)])
-    return bonus + time_bonus + approach - lam * effort
+    if captured:
+        return 100.0 + float(T - t_cap) - lam * effort
+
+    d0 = max(float(d[0]), 0.01)
+    # Fraction of initial gap that was closed (0 = no progress, 1 = fully closed)
+    approach_frac = max(0.0, float(d[0] - d[-1])) / d0
+    # Bonus for closest approach (rewards lunges even if predator bounces back)
+    closest_frac = max(0.0, float(d[0] - d.min())) / d0
+    return 10.0 * approach_frac + 5.0 * closest_frac - lam * effort
 
 
 def episode_reward_prey(d, T, r_capture, k_consecutive, d_threat, effort, lam):
+    """Prey reward: incentivise fleeing and maintaining separation.
+
+    - With capture:    0-10  proportional to survival time
+    - Without capture: 10+   with bonuses for gaining separation
+    """
     captured, t_cap = detect_capture(d, r_capture, k_consecutive)
-    t_alive = float(t_cap)
-    # Separation bonus (only when threatened, i.e. d < d_threat)
-    alive_d = d[1 : t_cap + 1] if t_cap > 0 else d[1:2]
-    threatened = alive_d < d_threat
-    if np.any(threatened):
-        sep_bonus = float(np.mean(alive_d[threatened] / max(d[0], 1e-6)))
-    else:
-        sep_bonus = 0.0
-    return t_alive + 0.5 * sep_bonus - lam * effort
+    if captured:
+        return 10.0 * float(t_cap) / float(max(T, 1)) - lam * effort
+
+    d0 = max(float(d[0]), 0.01)
+    # Bonus for increasing separation (ran away successfully)
+    sep_gain = max(0.0, float(d[-1] - d[0])) / d0
+    # Bonus for maintaining safety (how close did predator get as fraction of start)
+    min_safety = float(d.min()) / d0  # 1.0 = predator never got closer, <1 = it got closer
+    return 10.0 + 5.0 * sep_gain + 5.0 * min_safety - lam * effort
 
 
 def evaluate_fitness(simulator, individuals, opponents, hof_opponents, role, config):

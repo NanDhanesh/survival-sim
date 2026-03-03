@@ -215,28 +215,32 @@ class Simulator:
     def forward(self):
         for t in range(0, self.steps[None]):
             self.compute_com(t)
+            self.accumulate_distance(t)       # reads center[t], which was JUST computed
             self.nn1(t)
             self.nn2(t)
             self.apply_spring_force(t)
             self.advance(t + 1)
-            self.accumulate_distance(t)
             self.accumulate_effort(t)
             if t > 0:
                 self.accumulate_delta_effort(t)
         self.compute_com(self.steps[None])
+        self.accumulate_distance(self.steps[None])  # include final timestep
 
     def backward(self):
         self.compute_loss.grad()
+        # Reverse of: compute_com(T), accumulate_distance(T)
+        self.accumulate_distance.grad(self.steps[None])
         self.compute_com.grad(self.steps[None])
         for t in range(self.steps[None] - 1, -1, -1):
             if t > 0:
                 self.accumulate_delta_effort.grad(t)
             self.accumulate_effort.grad(t)
-            self.accumulate_distance.grad(t)
             self.advance.grad(t + 1)
             self.apply_spring_force.grad(t)
             self.nn2.grad(t)
             self.nn1.grad(t)
+            # Reverse of: compute_com(t), accumulate_distance(t)
+            self.accumulate_distance.grad(t)
             self.compute_com.grad(t)
 
     # ------------------------------------------------------------------
@@ -402,11 +406,15 @@ class Simulator:
     # ------------------------------------------------------------------
     @ti.kernel
     def accumulate_distance(self, t: ti.i32):
-        """Add distance-to-opponent at timestep *t+1* into dist_sum."""
+        """Add distance-to-opponent at timestep *t* into dist_sum.
+
+        IMPORTANT: must be called AFTER compute_com(t) so that
+        center[sim_idx, t] is valid.
+        """
         for sim_idx in range(self.n_sims[None]):
             opp = self.opponent_idx[sim_idx]
-            dx = self.center[sim_idx, t + 1][0] - self.center[opp, t + 1][0]
-            dy = self.center[sim_idx, t + 1][1] - self.center[opp, t + 1][1]
+            dx = self.center[sim_idx, t][0] - self.center[opp, t][0]
+            dy = self.center[sim_idx, t][1] - self.center[opp, t][1]
             self.dist_sum[sim_idx] += ti.sqrt(dx * dx + dy * dy + self.eps[None])
 
     @ti.kernel
@@ -441,7 +449,7 @@ class Simulator:
         accumulate_distance / accumulate_effort calls in forward().
         """
         for sim_idx in range(self.n_sims[None]):
-            avg_dist = self.dist_sum[sim_idx] / ti.cast(self.steps[None], ti.f32)
+            avg_dist = self.dist_sum[sim_idx] / ti.cast(self.steps[None] + 1, ti.f32)
             self.loss[sim_idx] = (
                 self.role_sign[sim_idx] * avg_dist
                 + self.lambda_effort[None] * self.effort_sum[sim_idx]

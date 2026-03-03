@@ -36,7 +36,9 @@ def run_evolution(config):
     simulator = Simulator(
         sim_config, config["taichi"], config["seed"], needs_grad=True
     )
-    simulator.lambda_effort[None] = coevo["lambda_effort"]
+    # Use a separate (lower) effort penalty for gradient training to avoid
+    # suppressing movement.  Evolutionary fitness uses the full lambda_effort.
+    simulator.lambda_effort[None] = coevo.get("training_lambda_effort", 0.0)
 
     # ------------------------------------------------------------------
     # Initialise populations (random morphologies, no trained controllers)
@@ -147,7 +149,8 @@ def run_evolution(config):
 
         print(
             f"  Gen {gen:3d}/{G} | "
-            f"pred={pred_fit.mean():+8.2f}  prey={prey_fit.mean():8.1f} | "
+            f"pred={pred_fit.mean():+7.2f} (max {pred_fit.max():+.2f})  "
+            f"prey={prey_fit.mean():7.2f} (max {prey_fit.max():.2f}) | "
             f"train={train_time:.1f}s  eval={eval_time:.1f}s  total={gen_time:.1f}s | "
             f"ETA {eta_str}"
         )
