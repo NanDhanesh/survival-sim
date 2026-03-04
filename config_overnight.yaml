@@ -1,0 +1,48 @@
+seed: 0
+
+## Taichi configuration parameters
+taichi:
+  arch: cpu
+  init:
+    device_memory_GB: 16.0
+    debug: False
+
+## Simulator configuration parameters
+simulator:
+  n_sims: 8               # Overridden: 2 * population_size
+  sim_steps: 500           # 500 @ dt=3e-3 = 1.5s sim time (vs 0.9s default)
+  dt: 3e-3
+  eps: 1e-5
+  springA: 0.1
+  springK: 15000.0
+  ground_height: 0.02
+  gravity: 10.0
+  friction: 0.9
+  restitution: 0.1
+  drag_damping: 10.0
+  nn_hidden_size: 128
+  nn_cpg_count: 6
+  cpg_omega: 15.0
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  learning_rate: 7e-3
+
+## Coevolution — tuned for ~9 hour run on CPU
+coevolution:
+  population_size: 4        # 4 predators + 4 prey — save budget for training quality
+  num_generations: 190       # 90% more evolutionary time for the arms race
+  controller_training_steps: 60  # Double the default — crucial for learning locomotion
+  r_capture: 0.15
+  k_consecutive: 5
+  d_min: 0.3
+  d_max: 1.0
+  d_threat_mult: 3.0
+  lambda_effort: 0.02
+  training_lambda_effort: 0.005
+  matchups_current: 3       # 3 current-gen opponents (75% of pop) for robust fitness
+  matchups_hof: 1           # 1 HoF opponent to prevent cycling
+  n_gaps: 2                 # 2 random starting gaps per matchup — smooths fitness noise
+  hof_size: 50
+  hof_k: 2
+  p_flip: 0.05
+  min_voxels: 3
