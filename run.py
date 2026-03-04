@@ -115,20 +115,31 @@ def run_evolution(config):
 
         # ==============================================================
         # 4. Selection (parallel hill climber: child replaces parent if >=)
+        #    NaN fitness is treated as -inf — never selected.
         # ==============================================================
         for i in range(P):
-            if pred_child_fit[i] >= pred_parent_fit[i]:
+            cf = pred_child_fit[i] if np.isfinite(pred_child_fit[i]) else -np.inf
+            pf = pred_parent_fit[i] if np.isfinite(pred_parent_fit[i]) else -np.inf
+            if cf >= pf:
                 predators[i] = pred_children[i]
         for i in range(P):
-            if prey_child_fit[i] >= prey_parent_fit[i]:
+            cf = prey_child_fit[i] if np.isfinite(prey_child_fit[i]) else -np.inf
+            pf = prey_parent_fit[i] if np.isfinite(prey_parent_fit[i]) else -np.inf
+            if cf >= pf:
                 prey[i] = prey_children[i]
 
-        # Surviving fitness (the winner of each pair)
+        # Surviving fitness (the winner of each pair, NaN-safe)
         pred_fit = np.array([
-            max(pred_parent_fit[i], pred_child_fit[i]) for i in range(P)
+            max(pred_parent_fit[i], pred_child_fit[i])
+            if np.isfinite(pred_parent_fit[i]) and np.isfinite(pred_child_fit[i])
+            else (pred_parent_fit[i] if np.isfinite(pred_parent_fit[i]) else pred_child_fit[i])
+            for i in range(P)
         ])
         prey_fit = np.array([
-            max(prey_parent_fit[i], prey_child_fit[i]) for i in range(P)
+            max(prey_parent_fit[i], prey_child_fit[i])
+            if np.isfinite(prey_parent_fit[i]) and np.isfinite(prey_child_fit[i])
+            else (prey_parent_fit[i] if np.isfinite(prey_parent_fit[i]) else prey_child_fit[i])
+            for i in range(P)
         ])
 
         # ==============================================================

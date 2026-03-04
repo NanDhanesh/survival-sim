@@ -1,0 +1,48 @@
+seed: 0
+
+## Taichi configuration parameters
+taichi:
+  arch: cpu
+  init:
+    device_memory_GB: 16.0
+    debug: False
+
+## Simulator configuration parameters
+simulator:
+  n_sims: 4               # Overridden: 2 * population_size
+  sim_steps: 200           # Shorter episodes for speed (200 @ dt=3e-3 = 0.6s)
+  dt: 3e-3
+  eps: 1e-5
+  springA: 0.1
+  springK: 15000.0
+  ground_height: 0.02
+  gravity: 10.0
+  friction: 0.9
+  restitution: 0.1
+  drag_damping: 10.0
+  nn_hidden_size: 128
+  nn_cpg_count: 6
+  cpg_omega: 15.0
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  learning_rate: 7e-3
+
+## Coevolution — tuned for ~5 min total on CPU
+coevolution:
+  population_size: 2        # Minimum viable: 2 predators + 2 prey
+  num_generations: 25       # Enough to see fitness trends
+  controller_training_steps: 12  # Fewer grad steps (still enough to learn basic movement)
+  r_capture: 0.15
+  k_consecutive: 5
+  d_min: 0.3
+  d_max: 0.8               # Tighter range so robots start close
+  d_threat_mult: 3.0
+  lambda_effort: 0.02
+  training_lambda_effort: 0.005
+  matchups_current: 1       # 1 opponent from current gen (faster eval)
+  matchups_hof: 0           # Skip HoF matchups for speed
+  n_gaps: 1
+  hof_size: 20
+  hof_k: 1
+  p_flip: 0.05
+  min_voxels: 3

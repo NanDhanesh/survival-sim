@@ -56,6 +56,8 @@ class Simulator:
         self.w1_input_dim = ti.field(dtype=ti.i32, shape=(), needs_grad=False)
         # NEW: effort penalty weight
         self.lambda_effort = ti.field(dtype=ti.f32, shape=(), needs_grad=False)
+        # Gradient clipping threshold (prevents NaN explosion)
+        self.grad_clip = ti.field(dtype=ti.f32, shape=(), needs_grad=False)
 
         self.n_sims[None] = self.config["n_sims"]
         self.steps[None] = self.config["sim_steps"]
@@ -80,6 +82,7 @@ class Simulator:
                                     + self.nn_cpg_count[None]
                                     + N_OPPONENT_FEATURES)
         self.lambda_effort[None] = 0.02  # default; evolution code overrides
+        self.grad_clip[None] = 1.0      # gradient clipping threshold
 
     # ------------------------------------------------------------------
     # Field allocation
@@ -364,6 +367,13 @@ class Simulator:
                 damping = ti.exp(-self.dt[None] * self.drag_damping[None])
                 g = self.dt[None] * ti.Vector([0.0, -self.gravity[None]])
                 newv = damping * self.v[sim_idx, t - 1, mass_idx] + g + self.vinc[sim_idx, t, mass_idx]
+
+                # --- Smooth velocity clamping (branch-free, autodiff-safe) ---
+                speed = newv.norm() + self.eps[None]
+                max_vel = 30.0  # generous cap; normal locomotion is << 10
+                scale = ti.min(1.0, max_vel / speed)
+                newv = newv * scale
+
                 oldx = self.x[sim_idx, t - 1, mass_idx]
                 newx = oldx + self.dt[None] * newv
                 if newx[1] < self.ground_height[None]:
@@ -456,15 +466,19 @@ class Simulator:
             )
 
     # ------------------------------------------------------------------
-    # Weight update (Adam) with training mask
+    # Weight update (Adam) with training mask + gradient clipping
     # ------------------------------------------------------------------
+    @ti.func
+    def clip_grad(self, g: ti.f32) -> ti.f32:
+        return ti.math.clamp(g, -self.grad_clip[None], self.grad_clip[None])
+
     @ti.kernel
     def update_weights(self):
         for sim_idx, i, j in ti.ndrange(
             self.n_sims[None], self.w1_input_dim[None], self.nn_hidden_size[None]
         ):
             if self.training_mask[sim_idx] == 1:
-                grad = self.weights1.grad[sim_idx, i, j]
+                grad = self.clip_grad(self.weights1.grad[sim_idx, i, j])
                 self.weights1_grad_m[sim_idx, i, j] = (
                     self.adam_beta1[None] * self.weights1_grad_m[sim_idx, i, j]
                     + (1.0 - self.adam_beta1[None]) * grad
@@ -487,7 +501,7 @@ class Simulator:
             self.n_sims[None], self.nn_hidden_size[None], self.max_n_springs[None]
         ):
             if self.training_mask[sim_idx] == 1:
-                grad = self.weights2.grad[sim_idx, i, j]
+                grad = self.clip_grad(self.weights2.grad[sim_idx, i, j])
                 self.weights2_grad_m[sim_idx, i, j] = (
                     self.adam_beta1[None] * self.weights2_grad_m[sim_idx, i, j]
                     + (1.0 - self.adam_beta1[None]) * grad
@@ -508,7 +522,7 @@ class Simulator:
 
         for sim_idx, i in ti.ndrange(self.n_sims[None], self.nn_hidden_size[None]):
             if self.training_mask[sim_idx] == 1:
-                grad = self.biases1.grad[sim_idx, i]
+                grad = self.clip_grad(self.biases1.grad[sim_idx, i])
                 self.biases1_grad_m[sim_idx, i] = (
                     self.adam_beta1[None] * self.biases1_grad_m[sim_idx, i]
                     + (1.0 - self.adam_beta1[None]) * grad
@@ -529,7 +543,7 @@ class Simulator:
 
         for sim_idx, i in ti.ndrange(self.n_sims[None], self.max_n_springs[None]):
             if self.training_mask[sim_idx] == 1:
-                grad = self.biases2.grad[sim_idx, i]
+                grad = self.clip_grad(self.biases2.grad[sim_idx, i])
                 self.biases2_grad_m[sim_idx, i] = (
                     self.adam_beta1[None] * self.biases2_grad_m[sim_idx, i]
                     + (1.0 - self.adam_beta1[None]) * grad

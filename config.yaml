@@ -38,7 +38,7 @@ coevolution:
   d_max: 1.0                 # Max initial separation
   d_threat_mult: 3.0         # d_threat = d_threat_mult * r_capture
   lambda_effort: 0.02        # Effort penalty weight (for evolutionary fitness)
-  training_lambda_effort: 0.0   # Effort penalty during gradient training (0 = pure chase/flee signal)
+  training_lambda_effort: 0.005 # Small effort penalty during gradient training (regularises weights)
   matchups_current: 2        # Opponents from current generation per evaluation
   matchups_hof: 1            # Opponents from HoF per evaluation
   n_gaps: 1                  # Random initial gaps per opponent pairing

@@ -11,6 +11,16 @@ from robot import sample_robot, mutate_mask, robot_from_mask
 
 
 # ======================================================================
+# NaN safety helper
+# ======================================================================
+def _weights_have_nan(w_dict):
+    """Check if any weight array contains NaN."""
+    if w_dict is None:
+        return False
+    return any(np.isnan(w_dict[k]).any() for k in w_dict)
+
+
+# ======================================================================
 # Hall of Fame
 # ======================================================================
 class HallOfFame:
@@ -21,10 +31,21 @@ class HallOfFame:
         self.max_size = max_size
 
     def update(self, population, fitnesses, k=2):
-        """Add top-k individuals (by fitness) from the current generation."""
-        top_k_idx = np.argsort(fitnesses)[-k:]
+        """Add top-k individuals (by fitness) from the current generation.
+        Individuals with NaN fitness or NaN weights are skipped.
+        """
+        valid = np.isfinite(fitnesses)
+        valid_idx = np.where(valid)[0]
+        if len(valid_idx) == 0:
+            return
+        # Sort valid indices by fitness, take top-k
+        sorted_valid = valid_idx[np.argsort(fitnesses[valid_idx])]
+        top_k_idx = sorted_valid[-k:]
         for idx in top_k_idx:
-            self.entries.append(deepcopy(population[idx]))
+            ind = population[idx]
+            if ind.get("weights") is not None and _weights_have_nan(ind["weights"]):
+                continue
+            self.entries.append(deepcopy(ind))
         if len(self.entries) > self.max_size:
             self.entries = self.entries[-self.max_size :]
 
@@ -94,18 +115,26 @@ def load_weights_into_sim(simulator, individuals, slots):
 
 
 def extract_weights_from_sim(simulator, individuals, slots):
-    """Copy NN weights out of the simulator into individual dicts."""
+    """Copy NN weights out of the simulator into individual dicts.
+
+    If any slot's weights contain NaN, the individual's weights are
+    set to None so they will be re-initialised randomly next time.
+    """
     w1 = simulator.weights1.to_numpy()
     w2 = simulator.weights2.to_numpy()
     b1 = simulator.biases1.to_numpy()
     b2 = simulator.biases2.to_numpy()
     for ind, slot in zip(individuals, slots):
-        ind["weights"] = {
+        candidate = {
             "weights1": w1[slot].copy(),
             "weights2": w2[slot].copy(),
             "biases1": b1[slot].copy(),
             "biases2": b2[slot].copy(),
         }
+        if _weights_have_nan(candidate):
+            ind["weights"] = None  # will be re-randomised next training
+        else:
+            ind["weights"] = candidate
 
 
 # ======================================================================
@@ -382,4 +411,7 @@ def evaluate_fitness(simulator, individuals, opponents, hof_opponents, role, con
 
             n_episodes += 1
 
-    return total_reward / max(n_episodes, 1)
+    result = total_reward / max(n_episodes, 1)
+    # Replace NaN with a very bad fitness to prevent NaN propagation
+    result = np.where(np.isfinite(result), result, -1e6)
+    return result
