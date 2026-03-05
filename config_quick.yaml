@@ -32,10 +32,13 @@ coevolution:
   population_size: 2        # Minimum viable: 2 predators + 2 prey
   num_generations: 25       # Enough to see fitness trends
   controller_training_steps: 12  # Fewer grad steps (still enough to learn basic movement)
+  pred_training_mult: 1.5        # Predators get 1.5× training steps
   r_capture: 0.15
   k_consecutive: 5
   d_min: 0.3
   d_max: 0.8               # Tighter range so robots start close
+  d_max_start: 0.4          # Start even closer for predators
+  curriculum_gens: 8         # Quick ramp over 8 of 25 generations
   d_threat_mult: 3.0
   lambda_effort: 0.02
   training_lambda_effort: 0.005

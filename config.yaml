@@ -31,11 +31,14 @@ simulator:
 coevolution:
   population_size: 4        # P predators + P prey (use 4 for CPU, 8+ for CUDA)
   num_generations: 100
-  controller_training_steps: 30   # Gradient steps per training phase (need enough to learn locomotion)
+  controller_training_steps: 30   # Base gradient steps (prey gets this many)
+  pred_training_mult: 1.5         # Predators get 1.5× training steps (harder task)
   r_capture: 0.15            # Capture radius (world units, ~1.5 voxel edges)
   k_consecutive: 5           # Consecutive timesteps within r_capture to trigger capture
   d_min: 0.3                 # Min initial separation (achievable in 300 timesteps)
-  d_max: 1.0                 # Max initial separation
+  d_max: 1.0                 # Max initial separation (final, after curriculum)
+  d_max_start: 0.4           # Starting max separation (easy predator wins)
+  curriculum_gens: 30         # Generations to ramp d_max_start → d_max
   d_threat_mult: 3.0         # d_threat = d_threat_mult * r_capture
   lambda_effort: 0.02        # Effort penalty weight (for evolutionary fitness)
   training_lambda_effort: 0.005 # Small effort penalty during gradient training (regularises weights)

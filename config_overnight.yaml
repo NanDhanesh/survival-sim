@@ -31,11 +31,14 @@ simulator:
 coevolution:
   population_size: 4        # 4 predators + 4 prey — save budget for training quality
   num_generations: 190       # 90% more evolutionary time for the arms race
-  controller_training_steps: 60  # Double the default — crucial for learning locomotion
+  controller_training_steps: 60  # Base training steps (prey gets this many)
+  pred_training_mult: 1.5        # Predators get 1.5× training steps (90 steps)
   r_capture: 0.15
   k_consecutive: 5
   d_min: 0.3
-  d_max: 1.0
+  d_max: 1.0                    # Final max separation (reached after curriculum)
+  d_max_start: 0.4              # Starting max separation (easy for predators)
+  curriculum_gens: 60            # Generations to linearly ramp d_max_start → d_max
   d_threat_mult: 3.0
   lambda_effort: 0.02
   training_lambda_effort: 0.005

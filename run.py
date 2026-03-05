@@ -62,11 +62,36 @@ def run_evolution(config):
     G = coevo["num_generations"]
     T = sim_config["sim_steps"]
     K = coevo["controller_training_steps"]
-    print(f"\n  Config: P={P}, sim_steps={T}, train_steps={K}, generations={G}")
-    print(f"  Per generation: 4×train ({K} grad steps each) + 4×evaluate\n")
+    pred_mult = coevo.get("pred_training_mult", 1.0)
+    K_pred = int(K * pred_mult)
+    K_prey = K
+
+    # Distance curriculum: d_max ramps from d_max_start to d_max over curriculum_gens
+    d_max_final = coevo["d_max"]
+    d_max_start = coevo.get("d_max_start", d_max_final)  # no curriculum if absent
+    curriculum_gens = coevo.get("curriculum_gens", 0)
+
+    print(f"\n  Config: P={P}, sim_steps={T}, train_steps=pred:{K_pred}/prey:{K_prey}, generations={G}")
+    if curriculum_gens > 0:
+        print(f"  Distance curriculum: d_max {d_max_start:.2f} → {d_max_final:.2f} over {curriculum_gens} gens")
+    print(f"  Per generation: 4×train + 4×evaluate\n")
 
     for gen in range(G):
         gen_start = time.time()
+
+        # -- Distance curriculum: compute current d_max for this generation --
+        if curriculum_gens > 0 and gen < curriculum_gens:
+            frac = gen / max(curriculum_gens - 1, 1)
+            current_d_max = d_max_start + frac * (d_max_final - d_max_start)
+        else:
+            current_d_max = d_max_final
+
+        # Build per-generation config overrides
+        gen_config_pred = {**coevo, "d_max": current_d_max,
+                          "controller_training_steps": K_pred}
+        gen_config_prey = {**coevo, "d_max": current_d_max,
+                          "controller_training_steps": K_prey}
+        gen_config_eval = {**coevo, "d_max": current_d_max}
 
         # ==============================================================
         # 1. Morphology mutation (parallel hill climber)
@@ -82,14 +107,16 @@ def run_evolution(config):
 
         # ==============================================================
         # 2. Controller training (gradient-based, two-phase)
+        #    Predators get more steps (pred_training_mult) since their
+        #    task is harder (must locomote AND steer toward prey).
         # ==============================================================
         t0 = time.time()
         # Phase A: train predators (parents then children) against current prey
-        train_controllers(simulator, predators, prey, "predator", coevo)
-        train_controllers(simulator, pred_children, prey, "predator", coevo)
+        train_controllers(simulator, predators, prey, "predator", gen_config_pred)
+        train_controllers(simulator, pred_children, prey, "predator", gen_config_pred)
         # Phase B: train prey (parents then children) against (now improved) predators
-        train_controllers(simulator, prey, predators, "prey", coevo)
-        train_controllers(simulator, prey_children, predators, "prey", coevo)
+        train_controllers(simulator, prey, predators, "prey", gen_config_prey)
+        train_controllers(simulator, prey_children, predators, "prey", gen_config_prey)
         train_time = time.time() - t0
 
         # ==============================================================
@@ -100,16 +127,16 @@ def run_evolution(config):
         hof_pred_sample = pred_hof.sample(coevo["matchups_hof"])
 
         pred_parent_fit = evaluate_fitness(
-            simulator, predators, prey, hof_prey_sample, "predator", coevo
+            simulator, predators, prey, hof_prey_sample, "predator", gen_config_eval
         )
         pred_child_fit = evaluate_fitness(
-            simulator, pred_children, prey, hof_prey_sample, "predator", coevo
+            simulator, pred_children, prey, hof_prey_sample, "predator", gen_config_eval
         )
         prey_parent_fit = evaluate_fitness(
-            simulator, prey, predators, hof_pred_sample, "prey", coevo
+            simulator, prey, predators, hof_pred_sample, "prey", gen_config_eval
         )
         prey_child_fit = evaluate_fitness(
-            simulator, prey_children, predators, hof_pred_sample, "prey", coevo
+            simulator, prey_children, predators, hof_pred_sample, "prey", gen_config_eval
         )
         eval_time = time.time() - t0
 
@@ -158,12 +185,13 @@ def run_evolution(config):
         eta = gen_time * (G - gen - 1)
         eta_str = f"{int(eta//60)}m{int(eta%60):02d}s" if eta > 60 else f"{eta:.0f}s"
 
+        d_max_tag = f"  d_max={current_d_max:.2f}" if curriculum_gens > 0 else ""
         print(
             f"  Gen {gen:3d}/{G} | "
             f"pred={pred_fit.mean():+7.2f} (max {pred_fit.max():+.2f})  "
             f"prey={prey_fit.mean():7.2f} (max {prey_fit.max():.2f}) | "
             f"train={train_time:.1f}s  eval={eval_time:.1f}s  total={gen_time:.1f}s | "
-            f"ETA {eta_str}"
+            f"ETA {eta_str}{d_max_tag}"
         )
 
         # Periodic checkpoint (every 10 generations)
