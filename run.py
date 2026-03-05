@@ -59,6 +59,12 @@ def run_evolution(config):
         "prey_captures": [],
     }
 
+    # All-time best tracking
+    best_pred_ever = None
+    best_pred_fit_ever = -np.inf
+    best_prey_ever = None
+    best_prey_fit_ever = -np.inf
+
     G = coevo["num_generations"]
     T = sim_config["sim_steps"]
     K = coevo["controller_training_steps"]
@@ -176,6 +182,23 @@ def run_evolution(config):
         prey_hof.update(prey, prey_fit, k=coevo["hof_k"])
 
         # ==============================================================
+        # 5b. Track all-time best individuals
+        # ==============================================================
+        gen_best_pred_idx = np.argmax(pred_fit)
+        if np.isfinite(pred_fit[gen_best_pred_idx]) and pred_fit[gen_best_pred_idx] > best_pred_fit_ever:
+            best_pred_fit_ever = pred_fit[gen_best_pred_idx]
+            best_pred_ever = deepcopy(predators[gen_best_pred_idx])
+            np.save("best_predator.npy", best_pred_ever)
+            print(f"    ★ New all-time best predator: {best_pred_fit_ever:+.2f} (gen {gen})")
+
+        gen_best_prey_idx = np.argmax(prey_fit)
+        if np.isfinite(prey_fit[gen_best_prey_idx]) and prey_fit[gen_best_prey_idx] > best_prey_fit_ever:
+            best_prey_fit_ever = prey_fit[gen_best_prey_idx]
+            best_prey_ever = deepcopy(prey[gen_best_prey_idx])
+            np.save("best_prey.npy", best_prey_ever)
+            print(f"    ★ New all-time best prey: {best_prey_fit_ever:.2f} (gen {gen})")
+
+        # ==============================================================
         # Logging
         # ==============================================================
         history["pred_fitness"].append(pred_fit.copy())
@@ -196,18 +219,27 @@ def run_evolution(config):
 
         # Periodic checkpoint (every 10 generations)
         if (gen + 1) % 10 == 0 or gen == G - 1:
-            save_checkpoint(gen, predators, prey, pred_hof, prey_hof, history)
+            save_checkpoint(gen, predators, prey, pred_hof, prey_hof, history,
+                            best_pred_ever, best_prey_ever,
+                            best_pred_fit_ever, best_prey_fit_ever)
 
     return predators, prey, pred_hof, prey_hof, history
 
 
-def save_checkpoint(gen, predators, prey, pred_hof, prey_hof, history):
+def save_checkpoint(gen, predators, prey, pred_hof, prey_hof, history,
+                    best_pred_ever, best_prey_ever,
+                    best_pred_fit_ever, best_prey_fit_ever):
     """Save current state to disk."""
-    # Best individuals
+    # All-time best individuals (already saved on discovery, but re-save for safety)
+    if best_pred_ever is not None:
+        np.save("best_predator.npy", best_pred_ever)
+    if best_prey_ever is not None:
+        np.save("best_prey.npy", best_prey_ever)
+    # Current-gen best (useful for inspecting latest population)
     best_pred_idx = np.argmax(history["pred_fitness"][-1])
     best_prey_idx = np.argmax(history["prey_fitness"][-1])
-    np.save("best_predator.npy", predators[best_pred_idx])
-    np.save("best_prey.npy", prey[best_prey_idx])
+    np.save("latest_predator.npy", predators[best_pred_idx])
+    np.save("latest_prey.npy", prey[best_prey_idx])
     # Full populations
     np.save("predators.npy", predators)
     np.save("prey.npy", prey)
@@ -216,7 +248,7 @@ def save_checkpoint(gen, predators, prey, pred_hof, prey_hof, history):
     np.save("prey_hof.npy", prey_hof.entries)
     # Fitness history
     np.save("fitness_history.npy", history)
-    print(f"\n  [checkpoint gen {gen}] saved best_predator.npy, best_prey.npy, fitness_history.npy")
+    print(f"\n  [checkpoint gen {gen}] saved (best_pred={best_pred_fit_ever:+.2f}, best_prey={best_prey_fit_ever:.2f})")
 
 
 # ======================================================================
