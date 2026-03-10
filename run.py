@@ -77,6 +77,20 @@ def run_evolution(config):
     d_max_start = coevo.get("d_max_start", d_max_final)  # no curriculum if absent
     curriculum_gens = coevo.get("curriculum_gens", 0)
 
+    # Save "before evolution" baseline: random morphology with trained controller.
+    # Train deepcopies of the initial population against each other so the
+    # main population is unaffected.
+    prevo_preds = [deepcopy(p) for p in predators]
+    prevo_prey  = [deepcopy(p) for p in prey]
+    prevo_config_pred = {**coevo, "d_max": d_max_start, "controller_training_steps": K_pred}
+    prevo_config_prey = {**coevo, "d_max": d_max_start, "controller_training_steps": K_prey}
+    print("\n  Training controllers for pre-evolution baseline...")
+    train_controllers(simulator, prevo_preds, prevo_prey, "predator", prevo_config_pred)
+    train_controllers(simulator, prevo_prey,  prevo_preds, "prey",     prevo_config_prey)
+    np.save("prevo_predator.npy", prevo_preds[0])
+    np.save("prevo_prey.npy",     prevo_prey[0])
+    print("  Saved prevo_predator.npy and prevo_prey.npy\n")
+
     print(f"\n  Config: P={P}, sim_steps={T}, train_steps=pred:{K_pred}/prey:{K_prey}, generations={G}")
     if curriculum_gens > 0:
         print(f"  Distance curriculum: d_max {d_max_start:.2f} → {d_max_final:.2f} over {curriculum_gens} gens")
@@ -240,6 +254,14 @@ def save_checkpoint(gen, predators, prey, pred_hof, prey_hof, history,
     best_prey_idx = np.argmax(history["prey_fitness"][-1])
     np.save("latest_predator.npy", predators[best_pred_idx])
     np.save("latest_prey.npy", prey[best_prey_idx])
+    # "Before learning" baseline: evolved morphology with weights stripped
+    # so the visualizer uses a random-init controller
+    nolearn_pred = deepcopy(predators[best_pred_idx])
+    nolearn_pred["weights"] = None
+    nolearn_prey = deepcopy(prey[best_prey_idx])
+    nolearn_prey["weights"] = None
+    np.save("nolearn_predator.npy", nolearn_pred)
+    np.save("nolearn_prey.npy", nolearn_prey)
     # Full populations
     np.save("predators.npy", predators)
     np.save("prey.npy", prey)
